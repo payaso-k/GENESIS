@@ -6,12 +6,14 @@ import "./App.css";
 
 // --- Firebase設定 ---
 const firebaseConfig = {
-  apiKey: "AIzaSyCKPgR0jrOxXH2wBEBdEg-oHC7mHPZD6DM",
-  authDomain: "fc-clubs-management.firebaseapp.com",
-  projectId: "fc-clubs-management",
-  storageBucket: "fc-clubs-management.firebasestorage.app",
-  messagingSenderId: "498521204900",
-  appId: "1:498521204900:web:1d27cbe0222468f82dde31"
+  apiKey: "AIzaSyAY7Ylyqa4XNabC7R0TwZdg0xo4Lw1G1XQ",
+  authDomain: "genesis-1a41f.firebaseapp.com",
+  databaseURL: "https://genesis-1a41f-default-rtdb.firebaseio.com",
+  projectId: "genesis-1a41f",
+  storageBucket: "genesis-1a41f.firebasestorage.app",
+  messagingSenderId: "1034834920255",
+  appId: "1:1034834920255:web:6ecb16497b63e82d47098a",
+  measurementId: "G-YRY4Z4YS05"
 };
 
 const app = initializeApp(firebaseConfig);
