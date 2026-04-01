@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue } from "firebase/database";
 import { FORMATIONS } from "./formations";
+import html2canvas from "html2canvas"; // ★画像生成ライブラリを追加
 import "./App.css";
 
 // --- Firebase設定 ---
@@ -15,7 +16,6 @@ const firebaseConfig = {
   appId: "1:1034834920255:web:6ecb16497b63e82d47098a",
   measurementId: "G-YRY4Z4YS05"
 };
-
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -26,19 +26,91 @@ const toKey = (d) => {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 };
+
 const addMonths = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
 
-const MEMBERS = Array.from({ length: 20 }, (_, i) => ({
+const INITIAL_MEMBERS = Array.from({ length: 20 }, (_, i) => ({
   id: `m${i + 1}`,
-  label: `選手 ${i + 1}`,
+  label: `Member ${i + 1}`,
 }));
+
 const ADMIN_CODE_DEFAULT = "1234";
 
+// ★5色のテーマカラー構成
+const DEFAULT_COLORS = {
+  main: "#3e3226",    
+  accent1: "#9a2c2e", 
+  accent2: "#ca9e45", 
+  bg: "#e8e2d2",      
+  pageBg: "#f2eee2"   
+};
+
 // --- Sub Components ---
-function Calendar({ monthDate, selectedKey, onSelectDate, onPrev, onNext }) {
+function WeeklySummary({ currentKey, statusByDate, onSelectDate, membersCount }) {
+  if (!currentKey) return null;
+
+  const targetDate = new Date(currentKey);
+  const day = targetDate.getDay(); 
+  const diff = targetDate.getDate() - (day === 0 ? 6 : day - 1);
+  const monday = new Date(targetDate.setDate(diff));
+
+  const weekData = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const key = toKey(d);
+    
+    const dayStatuses = statusByDate[key] || {};
+    let ok = 0, maybe = 0, no = 0;
+    Object.values(dayStatuses).forEach(val => {
+      if (val === "ok") ok++;
+      if (val === "maybe") maybe++;
+      if (val === "no") no++;
+    });
+    const unknown = Math.max(0, membersCount - (ok + maybe + no));
+
+    weekData.push({ date: d, key, ok, maybe, no, unknown });
+  }
+
+  const WEEKS = ["月", "火", "水", "木", "金", "土", "日"];
+
+  return (
+    <div className="summaryCard">
+      <div className="summaryTitle">
+        週間集計 ({toKey(monday).slice(5).replace('-', '/')} 〜)
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+        {weekData.map((item, idx) => {
+          const isSelected = item.key === currentKey;
+          const isSat = idx === 5;
+          const isSun = idx === 6;
+          return (
+            <div 
+              key={item.key} 
+              onClick={() => onSelectDate(item.key)}
+              className={`summaryDay ${isSelected ? 'selected' : ''}`}
+            >
+              <div style={{ fontWeight: 'bold', color: isSun ? 'var(--theme-accent1)' : isSat ? 'var(--theme-accent2)' : 'var(--theme-main)' }}>
+                {WEEKS[idx]} <span style={{ fontSize: '9px', fontWeight: 'normal', opacity: 0.7 }}>{item.date.getDate()}</span>
+              </div>
+              <div style={{ marginTop: '4px', lineHeight: '1.2' }}>
+                <div style={{ color: 'var(--theme-accent1)' }}>○ {item.ok}</div>
+                <div style={{ color: 'var(--theme-accent2)' }}>△ {item.maybe}</div>
+                <div style={{ color: 'var(--theme-main)' }}>× {item.no}</div>
+                <div style={{ color: 'var(--theme-main)', opacity: 0.5 }}>- {item.unknown}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Calendar({ monthDate, selectedKey, onSelectDate, onPrev, onNext, generalMemosByDate = {} }) {
   const start = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
   const end = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-  const startDow = (start.getDay() + 6) % 7; // 月曜始まりならこう。日曜始まりなら start.getDay()
+  const startDow = (start.getDay() + 6) % 7; 
   const daysInMonth = end.getDate();
   
   const cells = [];
@@ -46,8 +118,7 @@ function Calendar({ monthDate, selectedKey, onSelectDate, onPrev, onNext }) {
   for (let day = 1; day <= daysInMonth; day++) cells.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
   while (cells.length % 7 !== 0) cells.push(null);
 
-  // 曜日ヘッダー（日曜始まり）
-  const DAYS = ["日", "月", "火", "水", "木", "金", "土"];
+  const DAYS = ["月", "火", "水", "木", "金", "土", "日"];
 
   return (
     <div className="calendarCard">
@@ -56,7 +127,6 @@ function Calendar({ monthDate, selectedKey, onSelectDate, onPrev, onNext }) {
         <div className="calendarTitle">{toKey(monthDate).substring(0, 7)}</div>
         <button className="navBtn" onClick={onNext} type="button">›</button>
       </div>
-      {/* 曜日を表示する行を追加 */}
       <div className="weekRow">
         {DAYS.map(d => <div key={d} className={`weekDay ${d === "日" ? "sunday" : d === "土" ? "saturday" : ""}`}>{d}</div>)}
       </div>
@@ -65,14 +135,18 @@ function Calendar({ monthDate, selectedKey, onSelectDate, onPrev, onNext }) {
           if (!d) return <div key={idx} className="dayCell empty" />;
           const key = toKey(d);
           const isToday = key === toKey(new Date());
+          const isSelected = key === selectedKey;
+          const hasMemo = generalMemosByDate[key] && generalMemosByDate[key].trim() !== "";
+
           return (
             <button
               key={key}
               type="button"
-              className={`dayCell ${key === selectedKey ? "selected" : ""} ${isToday ? "today" : ""}`}
+              className={`dayCell ${isSelected ? "selected" : ""} ${isToday ? "today" : ""}`}
               onClick={() => onSelectDate(key)}
             >
               {d.getDate()}
+              {hasMemo && <div className="memo-dot" />}
             </button>
           );
         })}
@@ -84,10 +158,19 @@ function Calendar({ monthDate, selectedKey, onSelectDate, onPrev, onNext }) {
 // --- Main Component ---
 export default function App() {
   const keys = Object.keys(FORMATIONS);
+  
+  const [membersList, setMembersList] = useState(INITIAL_MEMBERS);
   const [formationByDate, setFormationByDate] = useState({});
   const [defaultFormation, setDefaultFormation] = useState(keys[0] || "3-4-2-1");
   const [teamName, setTeamName] = useState("TEAM NAME");
   const [logoDataUrl, setLogoDataUrl] = useState("");
+  
+  const [themeMain, setThemeMain] = useState(DEFAULT_COLORS.main);
+  const [themeAccent1, setThemeAccent1] = useState(DEFAULT_COLORS.accent1);
+  const [themeAccent2, setThemeAccent2] = useState(DEFAULT_COLORS.accent2);
+  const [themeBg, setThemeBg] = useState(DEFAULT_COLORS.bg);
+  const [themePageBg, setThemePageBg] = useState(DEFAULT_COLORS.pageBg); 
+  
   const [isAdmin, setIsAdmin] = useState(false);
   const [isMaster, setIsMaster] = useState(false);
   const [adminCode, setAdminCode] = useState(ADMIN_CODE_DEFAULT);
@@ -96,8 +179,13 @@ export default function App() {
   const [monthDate, setMonthDate] = useState(() => new Date());
   const [selectedDateKey, setSelectedDateKey] = useState(() => toKey(new Date()));
   const [statusByDate, setStatusByDate] = useState({});
+  const [memosByDate, setMemosByDate] = useState({});
   const [placedBySlotByDate, setPlacedBySlotByDate] = useState({});
+  const [generalMemosByDate, setGeneralMemosByDate] = useState({});
   const [isLoaded, setIsLoaded] = useState(false);
+  
+  // ★画像書き出し中のローディング状態
+  const [isExporting, setIsExporting] = useState(false);
 
   const currentFormation = formationByDate[selectedDateKey] || defaultFormation || keys[0];
   const status = statusByDate[selectedDateKey] || {};
@@ -115,8 +203,17 @@ export default function App() {
         if (data.formationByDate) setFormationByDate(data.formationByDate);
         if (data.defaultFormation) setDefaultFormation(data.defaultFormation);
         if (data.statusByDate) setStatusByDate(data.statusByDate);
+        if (data.memosByDate) setMemosByDate(data.memosByDate);
         if (data.placedBySlotByDate) setPlacedBySlotByDate(data.placedBySlotByDate);
         if (data.adminCode) setAdminCode(data.adminCode);
+        if (data.membersList) setMembersList(data.membersList);
+        if (data.generalMemosByDate) setGeneralMemosByDate(data.generalMemosByDate);
+        
+        if (data.themeMain) setThemeMain(data.themeMain);
+        if (data.themeAccent1) setThemeAccent1(data.themeAccent1);
+        if (data.themeAccent2) setThemeAccent2(data.themeAccent2);
+        if (data.themeBg) setThemeBg(data.themeBg);
+        if (data.themePageBg) setThemePageBg(data.themePageBg); 
       }
       setIsLoaded(true);
     });
@@ -127,9 +224,14 @@ export default function App() {
     if (!isLoaded) return;
     const dbRef = ref(db, 'teamData/');
     set(dbRef, {
-      teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, placedBySlotByDate, adminCode
+      teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate,
+      themeMain, themeAccent1, themeAccent2, themeBg, themePageBg 
     });
-  }, [teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, placedBySlotByDate, adminCode, isLoaded]);
+  }, [teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate, themeMain, themeAccent1, themeAccent2, themeBg, themePageBg, isLoaded]);
+
+  useEffect(() => {
+    document.body.style.backgroundColor = themePageBg;
+  }, [themePageBg]);
 
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
@@ -161,13 +263,90 @@ export default function App() {
   };
 
   const setStatusFor = (id, val) => {
-    setStatusByDate((p) => ({ ...p, [selectedDateKey]: { ...(p[selectedDateKey] || {}), [id]: val } }));
+    setStatusByDate((prev) => {
+      const currentDay = prev[selectedDateKey] || {};
+      const currentVal = currentDay[id]; 
+      const newDay = { ...currentDay };
+      if (currentVal === val) {
+        delete newDay[id];
+      } else {
+        newDay[id] = val;
+      }
+      return { ...prev, [selectedDateKey]: newDay };
+    });
   };
 
-  const benchMembers = MEMBERS.filter(m => (status[m.id] === "ok" || status[m.id] === "maybe") && !Object.values(placedBySlot).includes(m.id));
+  const handleAddMember = () => {
+    const newId = `m${Date.now()}`;
+    setMembersList([...membersList, { id: newId, label: `Member` }]);
+  };
+
+  const handleDeleteMember = (id) => {
+    if (window.confirm("このメンバーを削除しますか？\n（過去のデータは残りますが、リストからは消えます）")) {
+      setMembersList(membersList.filter(m => m.id !== id));
+    }
+  };
+
+  // ★追加：フォーメーションを画像として書き出す関数
+  const handleExportImage = async () => {
+    const target = document.getElementById("pitch-export-area");
+    if (!target) return;
+
+    setIsExporting(true);
+
+    try {
+      const canvas = await html2canvas(target, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: themeBg 
+      });
+
+      const dataUrl = canvas.toDataURL("image/png");
+
+      if (navigator.share) {
+        try {
+          const response = await fetch(dataUrl);
+          const blob = await response.blob();
+          const file = new File([blob], `formation_${selectedDateKey}.png`, { type: 'image/png' });
+          
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: `${teamName} フォーメーション`,
+              files: [file]
+            });
+            setIsExporting(false);
+            return;
+          }
+        } catch (shareError) {
+          console.log("Share API キャンセルまたはエラー:", shareError);
+        }
+      }
+
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `formation_${selectedDateKey}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } catch (error) {
+      console.error("画像生成エラー:", error);
+      alert("画像の生成に失敗しました。");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const benchMembers = membersList.filter(m => (status[m.id] === "ok" || status[m.id] === "maybe") && !Object.values(placedBySlot).includes(m.id));
 
   return (
-    <div className="page">
+    <div className="page" style={{
+      '--theme-main': themeMain,
+      '--theme-accent1': themeAccent1,
+      '--theme-accent2': themeAccent2,
+      '--theme-bg': themeBg,
+      '--theme-page-bg': themePageBg
+    }}>
       <header className="topbar">
         <div className="brandBar">
           <div className="logoBox">
@@ -185,10 +364,6 @@ export default function App() {
               else { alert("コードが違います"); }
             }
           }}>{(isAdmin || isMaster) ? "ログアウト" : "管理者"}</button>
-
-          <select className="select" value={currentFormation} onChange={(e) => setFormationByDate(prev => ({ ...prev, [selectedDateKey]: e.target.value }))}>
-            {keys.map(k => <option key={k} value={k}>{k}</option>)}
-          </select>
         </div>
       </header>
 
@@ -202,6 +377,33 @@ export default function App() {
             <label className="adminLabel">チームロゴ変更</label>
             <input type="file" accept="image/*" onChange={handleLogoChange} />
           </div>
+
+          <div className="adminField">
+            <label className="adminLabel">チームカラー設定 (5色)</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '5px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="colorHint">1. メイン（ヘッダー・×・文字）</span>
+                <input type="color" value={themeMain} onChange={(e) => setThemeMain(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="colorHint">2. アクセント1（〇・日曜・強調）</span>
+                <input type="color" value={themeAccent1} onChange={(e) => setThemeAccent1(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="colorHint">3. アクセント2（△・土曜・枠線）</span>
+                <input type="color" value={themeAccent2} onChange={(e) => setThemeAccent2(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="colorHint">4. 背景１（カード等の土台）</span>
+                <input type="color" value={themeBg} onChange={(e) => setThemeBg(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="colorHint">5. 背景２（一番外側・日付の色）</span>
+                <input type="color" value={themePageBg} onChange={(e) => setThemePageBg(e.target.value)} />
+              </div>
+            </div>
+          </div>
+
           <div className="adminField">
             <label className="adminLabel">全体デフォルトフォーメーション</label>
             <select className="select" value={defaultFormation} onChange={(e) => setDefaultFormation(e.target.value)}>
@@ -209,40 +411,97 @@ export default function App() {
             </select>
           </div>
           <div className="adminField">
-            <label className="adminLabel" style={{ color: '#ffcc00' }}>管理者パスコード変更</label>
-            <input className="textInput" type="text" value={adminCode} onChange={(e) => setAdminCode(e.target.value)} style={{ border: '1px solid #ffcc00' }} />
+            <label className="adminLabel" style={{ color: 'var(--theme-accent1)' }}>管理者パスコード変更</label>
+            <input className="textInput" type="text" value={adminCode} onChange={(e) => setAdminCode(e.target.value)} style={{ borderColor: 'var(--theme-accent1)' }} />
           </div>
         </div>
       )}
 
-      {/* ★並び順変更：シンプルに上から順に並べる構造に変更 */}
       <div className="layout">
         
-        {/* 1. カレンダー */}
         <div className="section-calendar">
-          <Calendar monthDate={monthDate} selectedKey={selectedDateKey} onSelectDate={setSelectedDateKey} onPrev={() => setMonthDate(addMonths(monthDate, -1))} onNext={() => setMonthDate(addMonths(monthDate, 1))} />
+          <Calendar 
+            monthDate={monthDate} 
+            selectedKey={selectedDateKey} 
+            onSelectDate={setSelectedDateKey} 
+            onPrev={() => setMonthDate(addMonths(monthDate, -1))} 
+            onNext={() => setMonthDate(addMonths(monthDate, 1))} 
+            generalMemosByDate={generalMemosByDate}
+          />
+          <WeeklySummary 
+            currentKey={selectedDateKey} 
+            statusByDate={statusByDate} 
+            onSelectDate={setSelectedDateKey} 
+            membersCount={membersList.length} 
+          />
         </div>
 
-        {/* 2. 出欠リスト（2列表示用クラス listGridWrapper を追加） */}
         <div className="section-list">
+          
+          <div className="panelHeader"><div className="panelTitle">全体メモ</div></div>
+          <textarea
+            className="generalMemoInput"
+            placeholder="全体への連絡事項"
+            key={`general-memo-${selectedDateKey}`}
+            defaultValue={generalMemosByDate[selectedDateKey] || ""}
+            onBlur={(e) => {
+              const val = e.target.value;
+              setGeneralMemosByDate(prev => ({
+                ...prev,
+                [selectedDateKey]: val
+              }));
+            }}
+          />
+
           <div className="panelHeader"><div className="panelTitle">出欠確認</div></div>
           <div className="listGridWrapper">
-            {MEMBERS.map(m => (
+            {membersList.map(m => (
               <div key={m.id} className="listRowCompact">
-                <input className="listNameCompact" value={names[m.id] || ""} placeholder={m.label} onChange={(e) => setNames({ ...names, [m.id]: e.target.value })} />
-                <div className="listBtnsCompact">
-                  {["ok", "maybe", "no"].map(type => (
-                    <button key={type} className={`listBtnCompact ${type} ${status[m.id] === type ? "active" : ""}`} onClick={() => setStatusFor(m.id, type)} type="button">
-                      {type === "ok" ? "○" : type === "maybe" ? "△" : "×"}
-                    </button>
-                  ))}
+                <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                  
+                  {(isAdmin || isMaster) && (
+                    <button type="button" className="deleteBtn" onClick={() => handleDeleteMember(m.id)}>×</button>
+                  )}
+
+                  <input className="listNameCompact" value={names[m.id] || ""} placeholder={m.label} onChange={(e) => setNames({ ...names, [m.id]: e.target.value })} />
+                  <div className="listBtnsCompact">
+                    {["ok", "maybe", "no"].map(type => (
+                      <button 
+                        key={type} 
+                        className={`listBtnCompact ${type} ${status[m.id] === type ? "active" : ""}`} 
+                        onClick={() => setStatusFor(m.id, type)} 
+                        type="button"
+                      >
+                        {type === "ok" ? "○" : type === "maybe" ? "△" : "×"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                <input
+                  type="text"
+                  className="personalMemoInput"
+                  placeholder="memo..."
+                  key={`${m.id}-${selectedDateKey}`}
+                  defaultValue={(memosByDate[selectedDateKey] || {})[m.id] || ""}
+                  onBlur={(e) => {
+                    const val = e.target.value;
+                    setMemosByDate(prev => ({
+                      ...prev,
+                      [selectedDateKey]: { ...(prev[selectedDateKey] || {}), [m.id]: val }
+                    }));
+                  }}
+                />
               </div>
             ))}
           </div>
+
+          {(isAdmin || isMaster) && (
+            <div style={{ marginTop: '10px', textAlign: 'center' }}>
+              <button type="button" className="addBtn" onClick={handleAddMember}>＋ メンバーを追加</button>
+            </div>
+          )}
         </div>
 
-        {/* 3. ベンチ */}
         <div className="section-bench">
           <div className="panelHeader"><div className="panelTitle">ベンチ（待機メンバー）</div></div>
           <div className="benchGrid">
@@ -255,9 +514,16 @@ export default function App() {
           </div>
         </div>
 
-        {/* 4. ピッチ（一番下） */}
-        <div className="section-pitch">
-          <div className="pitchWrap">
+        {/* ★修正済み：レイアウト崩れを防ぐ設定と、正しいIDの配置 */}
+        <div className="section-pitch" style={{ flexDirection: 'column', alignItems: 'center' }}>
+          
+          <div style={{ width: '95%', maxWidth: '600px', display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+            <button className="exportBtn" onClick={handleExportImage} disabled={isExporting}>
+              {isExporting ? "⏳ 処理中..." : "画像として書き出す"}
+            </button>
+          </div>
+
+          <div className="pitchWrap" id="pitch-export-area">
             <div className="pitch">
               <div className="lineLayer">
                 <div className="outerLine" /><div className="halfLine" /><div className="centerCircle" /><div className="centerSpot" />
@@ -272,12 +538,25 @@ export default function App() {
                     onDrop={(e) => placeMember(e.dataTransfer.getData("text/memberId"), s.id)}
                     onClick={() => { if (selectedMemberId) placeMember(selectedMemberId, s.id); else if (mId) removeFromSlot(s.id); }}>
                     <div className="posRole">{s.role}</div>
-                    {mId ? <button className={`posName status-${st}`} type="button">{names[mId] || MEMBERS.find(x => x.id === mId)?.label || "NAME"}</button> : <div className="posEmpty">DROP</div>}
+                    {mId ? <button className={`posName status-${st}`} type="button">{names[mId] || membersList.find(x => x.id === mId)?.label || "NAME"}</button> : <div className="posEmpty">DROP</div>}
                   </div>
                 );
               })}
             </div>
           </div>
+        </div>
+
+        <div className="section-formation">
+           <div className="panelHeader" style={{ borderBottom: `2px solid var(--theme-main)`, marginBottom: '15px', paddingBottom: '10px' }}>
+              <div className="panelTitle" style={{ fontWeight: 'bold' }}>フォーメーション変更</div>
+           </div>
+           <select 
+             className="select" 
+             value={currentFormation} 
+             onChange={(e) => setFormationByDate(prev => ({ ...prev, [selectedDateKey]: e.target.value }))}
+           >
+             {keys.map(k => <option key={k} value={k}>{k}</option>)}
+           </select>
         </div>
 
       </div>
