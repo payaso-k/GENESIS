@@ -1,565 +1,345 @@
-import { useEffect, useMemo, useState } from "react";
-import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, onValue } from "firebase/database";
-import { FORMATIONS } from "./formations";
-import html2canvas from "html2canvas"; // ★画像生成ライブラリを追加
-import "./App.css";
+/* =========================================================
+   FC LINEUP MAKER - CUSTOM THEME (5 Colors)
+   ========================================================= */
 
-// --- Firebase設定 ---
-const firebaseConfig = {
-  apiKey: "AIzaSyAY7Ylyqa4XNabC7R0TwZdg0xo4Lw1G1XQ",
-  authDomain: "genesis-1a41f.firebaseapp.com",
-  databaseURL: "https://genesis-1a41f-default-rtdb.firebaseio.com",
-  projectId: "genesis-1a41f",
-  storageBucket: "genesis-1a41f.firebasestorage.app",
-  messagingSenderId: "1034834920255",
-  appId: "1:1034834920255:web:6ecb16497b63e82d47098a",
-  measurementId: "G-YRY4Z4YS05"
-};
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+:root {
+  /* ピッチの芝生（緑固定） */
+  --pitch-dark: #2f4f2f;
+  --pitch-light: #3a633a;
+}
 
-// --- Helpers ---
-const toKey = (d) => {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-};
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+}
 
-const addMonths = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
+* { box-sizing: border-box; }
 
-const INITIAL_MEMBERS = Array.from({ length: 20 }, (_, i) => ({
-  id: `m${i + 1}`,
-  label: `Member ${i + 1}`,
-}));
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
 
-const ADMIN_CODE_DEFAULT = "1234";
+.page { 
+  display: flex; 
+  flex-direction: column; 
+  min-height: 100vh; 
+  background-color: var(--theme-page-bg);
+  color: var(--theme-main);
+}
 
-// ★5色のテーマカラー構成
-const DEFAULT_COLORS = {
-  main: "#3e3226",    
-  accent1: "#9a2c2e", 
-  accent2: "#ca9e45", 
-  bg: "#e8e2d2",      
-  pageBg: "#f2eee2"   
-};
+/* --- 2. ヘッダー --- */
+.topbar {
+  background: var(--theme-main);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.brandBar { display: flex; align-items: center; gap: 12px; }
+.logoBox { 
+  width: 44px; height: 44px; 
+  border-radius: 50%; 
+  background: #fff; 
+  border: 2px solid var(--theme-accent2); 
+  overflow: hidden; flex-shrink: 0; 
+}
+.logoImg { width: 100%; height: 100%; object-fit: cover; }
+.logoPlaceholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 8px; color: var(--theme-main); opacity: 0.5; }
+.teamName { font-size: 20px; font-weight: 700; color: #fff; line-height: 1.2; }
 
-// --- Sub Components ---
-function WeeklySummary({ currentKey, statusByDate, onSelectDate, membersCount }) {
-  if (!currentKey) return null;
+.controls { display: flex; justify-content: space-between; gap: 10px; }
+.btn { 
+  background: var(--theme-accent1); 
+  border: 1px solid var(--theme-main); 
+  color: #fff; 
+  padding: 0 16px; height: 42px; border-radius: 8px; font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: center; white-space: nowrap; 
+}
+.select { 
+  flex: 1; height: 42px; 
+  background: #fff; 
+  color: var(--theme-main); 
+  border: 1px solid var(--theme-accent2); 
+  border-radius: 8px; text-align: center; font-size: 16px; font-weight: bold; 
+}
 
-  const targetDate = new Date(currentKey);
-  const day = targetDate.getDay(); 
-  const diff = targetDate.getDate() - (day === 0 ? 6 : day - 1);
-  const monday = new Date(targetDate.setDate(diff));
+/* --- 3. レイアウト全体 --- */
+.layout {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 40px;
+  gap: 20px;
+  width: 100%;
+  max-width: 1200px; 
+  margin: 0 auto;
+}
+.panelHeader { margin-bottom: 8px; }
+.panelTitle { color: var(--theme-main); font-weight: bold; font-size: 13px; letter-spacing: 1px; }
 
-  const weekData = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const key = toKey(d);
-    
-    const dayStatuses = statusByDate[key] || {};
-    let ok = 0, maybe = 0, no = 0;
-    Object.values(dayStatuses).forEach(val => {
-      if (val === "ok") ok++;
-      if (val === "maybe") maybe++;
-      if (val === "no") no++;
-    });
-    const unknown = Math.max(0, membersCount - (ok + maybe + no));
+/* --- 4. カレンダー & 週間集計 --- */
+.section-calendar { padding: 0 12px; }
+.calendarCard { 
+  background: var(--theme-bg); 
+  padding: 12px; border-radius: 12px; 
+  border: 1px solid color-mix(in srgb, var(--theme-main) 10%, transparent); 
+  margin-top: 10px; 
+  box-shadow: 0 4px 6px rgba(0,0,0, 0.05);
+}
+.calendarHeader { display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: bold; color: var(--theme-main); }
+.navBtn { 
+  width: 32px; height: 32px; border-radius: 50%; 
+  border: 1px solid var(--theme-accent2); 
+  color: var(--theme-accent1); 
+  display: flex; align-items: center; justify-content: center; background: #fff; 
+}
 
-    weekData.push({ date: d, key, ok, maybe, no, unknown });
+.weekRow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
+.weekDay { text-align: center; font-size: 12px; color: var(--theme-main); font-weight: bold; }
+.weekDay.sunday { color: var(--theme-accent1); }
+.weekDay.saturday { color: var(--theme-accent2); }
+
+.calendarGrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.dayCell { 
+  aspect-ratio: 1; 
+  background: #fff; 
+  border-radius: 8px; 
+  color: var(--theme-main);
+  border: 2px solid transparent;
+  display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; 
+  position: relative;
+}
+.dayCell.today { border-color: var(--theme-accent2) !important; }
+.dayCell.selected { 
+  background: var(--theme-accent1) !important; 
+  color: #fff !important; 
+  font-weight: bold !important; 
+  border-color: var(--theme-accent2) !important;
+}
+.summaryCard {
+  margin-top: 10px; padding: 8px 4px; 
+  background: color-mix(in srgb, var(--theme-main) 5%, transparent); 
+  border-radius: 8px; border: 1px solid color-mix(in srgb, var(--theme-main) 10%, transparent);
+}
+.summaryTitle {
+  font-size: 12px; font-weight: bold; color: var(--theme-main); opacity: 0.8; margin-bottom: 5px; text-align: center;
+}
+.summaryDay {
+  flex: 1; text-align: center; border-radius: 6px; padding: 4px 0; cursor: pointer; border: 1px solid transparent;
+}
+.summaryDay.selected {
+  background: var(--theme-page-bg); 
+  border-color: var(--theme-accent2);
+}
+
+/* --- 5. 出欠リスト --- */
+.section-list { padding: 0 16px; }
+.listGridWrapper { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+.listRowCompact { 
+  display: flex; flex-direction: column; 
+  background: var(--theme-bg); 
+  padding: 6px; border-radius: 8px; gap: 3px;
+  border: 1px solid color-mix(in srgb, var(--theme-main) 10%, transparent); 
+  box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+}
+.listNameCompact { 
+  background: transparent; border: none; 
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-main) 20%, transparent); 
+  color: var(--theme-main); 
+  font-size: 13px; font-weight: 500; text-align: center; width: 100%; 
+}
+.listBtnsCompact { display: flex; justify-content: space-between; gap: 4px; }
+.listBtnCompact { 
+  flex: 1; width: 28px; height: 30px; font-size: 14px; border-radius: 4px; 
+  border: 1px solid color-mix(in srgb, var(--theme-main) 15%, transparent); 
+  background: #fff; 
+  color: color-mix(in srgb, var(--theme-main) 50%, transparent);
+  display: flex; align-items: center; justify-content: center;
+}
+.listBtnCompact.ok.active { background: var(--theme-accent1); color: #fff; border-color: var(--theme-accent1); }
+.listBtnCompact.maybe.active { background: var(--theme-accent2); color: #fff; border-color: var(--theme-accent2); }
+.listBtnCompact.no.active { background: var(--theme-main); color: #fff; border-color: var(--theme-main); }
+
+.deleteBtn {
+  background: var(--theme-accent1); color: #fff; border: none; border-radius: 4px; 
+  width: 20px; height: 20px; font-size: 10px; margin-right: 5px; cursor: pointer;
+}
+.addBtn {
+  background: var(--theme-main); color: #fff; border: none; border-radius: 6px; 
+  padding: 6px 16px; font-size: 13px; cursor: pointer; font-weight: bold; width: 100%;
+}
+
+.personalMemoInput {
+  width: 100%; box-sizing: border-box; padding: 2px 4px; border-radius: 4px; 
+  border: 1px solid color-mix(in srgb, var(--theme-main) 20%, transparent); 
+  background: #fff; color: var(--theme-main); font-size: 11px;
+}
+.generalMemoInput {
+  width: 100%; min-height: 40px; padding: 8px; margin-bottom: 15px;
+  background: #fff; color: var(--theme-main); border-radius: 8px; font-size: 13px; resize: vertical; font-family: inherit; box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--theme-main) 30%, transparent);
+}
+.generalMemoInput:focus, .personalMemoInput:focus {
+  outline: 2px solid var(--theme-accent2);
+  border-color: transparent;
+}
+
+/* --- 6. ベンチエリア --- */
+.section-bench { padding: 0 16px; }
+.benchGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; }
+.benchCard { 
+  background: var(--theme-bg); 
+  border: 1px solid color-mix(in srgb, var(--theme-main) 15%, transparent); 
+  padding: 8px 4px; border-radius: 8px; text-align: center; cursor: grab; 
+  box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+}
+.selected-m { border: 2px solid var(--theme-accent2); background: color-mix(in srgb, var(--theme-accent2) 10%, #fff); }
+.benchName { font-size: 11px; margin-bottom: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--theme-main); }
+.benchStatus { font-weight: bold; font-size: 14px; color: var(--theme-main); }
+
+/* --- 7. ピッチ --- */
+.section-pitch {
+  padding: 10px 0; 
+  background: var(--theme-main); 
+  border-top: 4px solid var(--theme-accent2);
+  border-bottom: 4px solid var(--theme-accent2);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.pitchWrap {
+  width: 95%; max-width: 600px; aspect-ratio: 0.75; position: relative;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+}
+
+.pitch {
+  width: 100%; height: 100%;
+  
+  /* ★修正：画像保存ライブラリ対策として、単色の緑を下地に塗りつつ、シマシマを全部手書きにしました */
+  background-color: #2f4f2f;
+  background-image: linear-gradient(
+    to bottom,
+    #2f4f2f 0%, #2f4f2f 10%,
+    #3a633a 10%, #3a633a 20%,
+    #2f4f2f 20%, #2f4f2f 30%,
+    #3a633a 30%, #3a633a 40%,
+    #2f4f2f 40%, #2f4f2f 50%,
+    #3a633a 50%, #3a633a 60%,
+    #2f4f2f 60%, #2f4f2f 70%,
+    #3a633a 70%, #3a633a 80%,
+    #2f4f2f 80%, #2f4f2f 90%,
+    #3a633a 90%, #3a633a 100%
+  );
+  
+  border: 4px solid rgba(255,255,255,0.8);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.lineLayer div { position: absolute; border: 1px solid rgba(255,255,255,0.7); }
+.outerLine { top: 5%; bottom: 5%; left: 5%; right: 5%; border-width: 2px !important; }
+.halfLine { top: 50%; left: 5%; right: 5%; }
+.centerCircle { top: 50%; left: 50%; transform: translate(-50%,-50%); width: 22%; height: 15%; border-radius: 50%; }
+.penTop { top: 5%; left: 24%; width: 52%; height: 16%; }
+.penBottom { bottom: 5%; left: 24%; width: 52%; height: 16%; }
+
+.posSlot {
+  width: 58px; height: 58px;
+  position: absolute; transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, 0.2); 
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 50%;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  z-index: 10; cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.waiting-drop { background: rgba(202, 158, 69, 0.5); border-color: var(--theme-accent2); transform: translate(-50%, -50%) scale(1.1); }
+.posRole { font-size: 10px; font-weight: 800; color: #fff; margin-bottom: 2px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+.posEmpty { font-size: 9px; color: rgba(255,255,255,0.9); font-weight: bold; }
+.posName { 
+  width: 50px; font-size: 12px; background: #fff; 
+  border: #fff; border-radius: 12px; padding: 2px 0; overflow: hidden; text-align: center; font-weight: bold; 
+  color: var(--theme-main); box-shadow: 0 2px 4px rgba(0,0,0,0.3); 
+}
+
+.slot-ok { background: var(--theme-accent1) !important; border-color: #fff !important; color: #fff; } 
+.slot-maybe { background: var(--theme-accent2) !important; border-color: #fff !important; } 
+
+/* --- フォーメーション --- */
+.section-formation {
+  background: var(--theme-bg); padding: 15px; border-radius: 12px; 
+  border: 1px solid color-mix(in srgb, var(--theme-main) 10%, transparent); 
+  box-shadow: 0 4px 6px rgba(0,0,0, 0.05);
+}
+
+/* --- 8. 管理画面 --- */
+.adminPanelMobile { 
+  margin: 10px; padding: 15px; background: var(--theme-bg); 
+  border-radius: 12px; border: 2px solid var(--theme-accent2); 
+  display: flex; flex-direction: column; gap: 15px; 
+}
+.adminField { display: flex; flex-direction: column; gap: 6px; }
+.adminLabel { font-size: 12px; color: var(--theme-main); font-weight: bold; }
+.colorHint { font-size: 12px; color: var(--theme-main); opacity: 0.7; }
+
+.textInput { 
+  height: 44px; padding: 10px; background: #fff; color: var(--theme-main); 
+  border: 1px solid color-mix(in srgb, var(--theme-main) 30%, transparent); 
+  border-radius: 8px; font-size: 16px; 
+}
+input[type="file"], input[type="color"] {
+  background: #fff; border: 1px solid color-mix(in srgb, var(--theme-main) 30%, transparent);
+  border-radius: 8px; color: var(--theme-main); padding: 8px;
+}
+
+/* ★★★ PC向けのレイアウト調整 ★★★ */
+@media (min-width: 768px) {
+  .layout {
+    display: grid; grid-template-columns: 350px 1fr; grid-template-rows: auto auto auto;
+    align-items: start; gap: 20px; padding: 20px;
   }
-
-  const WEEKS = ["月", "火", "水", "木", "金", "土", "日"];
-
-  return (
-    <div className="summaryCard">
-      <div className="summaryTitle">
-        週間集計 ({toKey(monday).slice(5).replace('-', '/')} 〜)
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-        {weekData.map((item, idx) => {
-          const isSelected = item.key === currentKey;
-          const isSat = idx === 5;
-          const isSun = idx === 6;
-          return (
-            <div 
-              key={item.key} 
-              onClick={() => onSelectDate(item.key)}
-              className={`summaryDay ${isSelected ? 'selected' : ''}`}
-            >
-              <div style={{ fontWeight: 'bold', color: isSun ? 'var(--theme-accent1)' : isSat ? 'var(--theme-accent2)' : 'var(--theme-main)' }}>
-                {WEEKS[idx]} <span style={{ fontSize: '9px', fontWeight: 'normal', opacity: 0.7 }}>{item.date.getDate()}</span>
-              </div>
-              <div style={{ marginTop: '4px', lineHeight: '1.2' }}>
-                <div style={{ color: 'var(--theme-accent1)' }}>○ {item.ok}</div>
-                <div style={{ color: 'var(--theme-accent2)' }}>△ {item.maybe}</div>
-                <div style={{ color: 'var(--theme-main)' }}>× {item.no}</div>
-                <div style={{ color: 'var(--theme-main)', opacity: 0.5 }}>- {item.unknown}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  .section-calendar { grid-column: 1 / 2; grid-row: 1 / 2; max-width: 100%; }
+  .section-list { grid-column: 1 / 2; grid-row: 2 / 4; overflow-y: auto; max-height: 80vh; }
+  .listGridWrapper { grid-template-columns: 1fr; }
+  .section-bench { grid-column: 2 / 3; grid-row: 1 / 2; }
+  .section-pitch { grid-column: 2 / 3; grid-row: 2 / 3; background: transparent; border: none; min-height: auto; }
+  .section-formation { grid-column: 2 / 3; grid-row: 3 / 4; max-width: 600px; margin: 0 auto; width: 100%; }
 }
 
-function Calendar({ monthDate, selectedKey, onSelectDate, onPrev, onNext, generalMemosByDate = {} }) {
-  const start = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-  const end = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-  const startDow = (start.getDay() + 6) % 7; 
-  const daysInMonth = end.getDate();
-  
-  const cells = [];
-  for (let i = 0; i < startDow; i++) cells.push(null);
-  for (let day = 1; day <= daysInMonth; day++) cells.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
-  while (cells.length % 7 !== 0) cells.push(null);
+/* --- カレンダーのマーク（ドット） --- */
+.memo-dot {
+  position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
+  width: 5px; height: 5px; background-color: var(--theme-accent1); border-radius: 50%;
+}
+.dayCell.selected .memo-dot { background-color: #fff; }
 
-  const DAYS = ["月", "火", "水", "木", "金", "土", "日"];
-
-  return (
-    <div className="calendarCard">
-      <div className="calendarHeader">
-        <button className="navBtn" onClick={onPrev} type="button">‹</button>
-        <div className="calendarTitle">{toKey(monthDate).substring(0, 7)}</div>
-        <button className="navBtn" onClick={onNext} type="button">›</button>
-      </div>
-      <div className="weekRow">
-        {DAYS.map(d => <div key={d} className={`weekDay ${d === "日" ? "sunday" : d === "土" ? "saturday" : ""}`}>{d}</div>)}
-      </div>
-      <div className="calendarGrid">
-        {cells.map((d, idx) => {
-          if (!d) return <div key={idx} className="dayCell empty" />;
-          const key = toKey(d);
-          const isToday = key === toKey(new Date());
-          const isSelected = key === selectedKey;
-          const hasMemo = generalMemosByDate[key] && generalMemosByDate[key].trim() !== "";
-
-          return (
-            <button
-              key={key}
-              type="button"
-              className={`dayCell ${isSelected ? "selected" : ""} ${isToday ? "today" : ""}`}
-              onClick={() => onSelectDate(key)}
-            >
-              {d.getDate()}
-              {hasMemo && <div className="memo-dot" />}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
+/* --- 画像書き出しボタン --- */
+.exportBtn {
+  background: var(--theme-accent2);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: opacity 0.2s;
 }
 
-// --- Main Component ---
-export default function App() {
-  const keys = Object.keys(FORMATIONS);
-  
-  const [membersList, setMembersList] = useState(INITIAL_MEMBERS);
-  const [formationByDate, setFormationByDate] = useState({});
-  const [defaultFormation, setDefaultFormation] = useState(keys[0] || "3-4-2-1");
-  const [teamName, setTeamName] = useState("TEAM NAME");
-  const [logoDataUrl, setLogoDataUrl] = useState("");
-  
-  const [themeMain, setThemeMain] = useState(DEFAULT_COLORS.main);
-  const [themeAccent1, setThemeAccent1] = useState(DEFAULT_COLORS.accent1);
-  const [themeAccent2, setThemeAccent2] = useState(DEFAULT_COLORS.accent2);
-  const [themeBg, setThemeBg] = useState(DEFAULT_COLORS.bg);
-  const [themePageBg, setThemePageBg] = useState(DEFAULT_COLORS.pageBg); 
-  
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isMaster, setIsMaster] = useState(false);
-  const [adminCode, setAdminCode] = useState(ADMIN_CODE_DEFAULT);
-  const [selectedMemberId, setSelectedMemberId] = useState(null);
-  const [names, setNames] = useState({});
-  const [monthDate, setMonthDate] = useState(() => new Date());
-  const [selectedDateKey, setSelectedDateKey] = useState(() => toKey(new Date()));
-  const [statusByDate, setStatusByDate] = useState({});
-  const [memosByDate, setMemosByDate] = useState({});
-  const [placedBySlotByDate, setPlacedBySlotByDate] = useState({});
-  const [generalMemosByDate, setGeneralMemosByDate] = useState({});
-  const [isLoaded, setIsLoaded] = useState(false);
-  
-  // ★画像書き出し中のローディング状態
-  const [isExporting, setIsExporting] = useState(false);
-
-  const currentFormation = formationByDate[selectedDateKey] || defaultFormation || keys[0];
-  const status = statusByDate[selectedDateKey] || {};
-  const placedBySlot = placedBySlotByDate[selectedDateKey] || {};
-  const slots = useMemo(() => FORMATIONS[currentFormation] ?? [], [currentFormation]);
-
-  useEffect(() => {
-    const dbRef = ref(db, 'teamData/');
-    const unsubscribe = onValue(dbRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        if (data.teamName) setTeamName(data.teamName);
-        if (data.logoDataUrl) setLogoDataUrl(data.logoDataUrl);
-        if (data.names) setNames(data.names);
-        if (data.formationByDate) setFormationByDate(data.formationByDate);
-        if (data.defaultFormation) setDefaultFormation(data.defaultFormation);
-        if (data.statusByDate) setStatusByDate(data.statusByDate);
-        if (data.memosByDate) setMemosByDate(data.memosByDate);
-        if (data.placedBySlotByDate) setPlacedBySlotByDate(data.placedBySlotByDate);
-        if (data.adminCode) setAdminCode(data.adminCode);
-        if (data.membersList) setMembersList(data.membersList);
-        if (data.generalMemosByDate) setGeneralMemosByDate(data.generalMemosByDate);
-        
-        if (data.themeMain) setThemeMain(data.themeMain);
-        if (data.themeAccent1) setThemeAccent1(data.themeAccent1);
-        if (data.themeAccent2) setThemeAccent2(data.themeAccent2);
-        if (data.themeBg) setThemeBg(data.themeBg);
-        if (data.themePageBg) setThemePageBg(data.themePageBg); 
-      }
-      setIsLoaded(true);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    const dbRef = ref(db, 'teamData/');
-    set(dbRef, {
-      teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate,
-      themeMain, themeAccent1, themeAccent2, themeBg, themePageBg 
-    });
-  }, [teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate, themeMain, themeAccent1, themeAccent2, themeBg, themePageBg, isLoaded]);
-
-  useEffect(() => {
-    document.body.style.backgroundColor = themePageBg;
-  }, [themePageBg]);
-
-  const handleLogoChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => setLogoDataUrl(e.target.result);
-    reader.readAsDataURL(file);
-  };
-
-  const placeMember = (mId, sId) => {
-    if (!mId) return;
-    const st = status[mId];
-    if (st !== "ok" && st !== "maybe") return;
-    setPlacedBySlotByDate((prev) => {
-      const nextDay = { ...(prev[selectedDateKey] || {}) };
-      for (const k in nextDay) if (nextDay[k] === mId) delete nextDay[k];
-      nextDay[sId] = mId;
-      return { ...prev, [selectedDateKey]: nextDay };
-    });
-    setSelectedMemberId(null);
-  };
-
-  const removeFromSlot = (sId) => {
-    setPlacedBySlotByDate((prev) => {
-      const nextDay = { ...(prev[selectedDateKey] || {}) };
-      delete nextDay[sId];
-      return { ...prev, [selectedDateKey]: nextDay };
-    });
-  };
-
-  const setStatusFor = (id, val) => {
-    setStatusByDate((prev) => {
-      const currentDay = prev[selectedDateKey] || {};
-      const currentVal = currentDay[id]; 
-      const newDay = { ...currentDay };
-      if (currentVal === val) {
-        delete newDay[id];
-      } else {
-        newDay[id] = val;
-      }
-      return { ...prev, [selectedDateKey]: newDay };
-    });
-  };
-
-  const handleAddMember = () => {
-    const newId = `m${Date.now()}`;
-    setMembersList([...membersList, { id: newId, label: `Member` }]);
-  };
-
-  const handleDeleteMember = (id) => {
-    if (window.confirm("このメンバーを削除しますか？\n（過去のデータは残りますが、リストからは消えます）")) {
-      setMembersList(membersList.filter(m => m.id !== id));
-    }
-  };
-
-  // ★追加：フォーメーションを画像として書き出す関数
-  const handleExportImage = async () => {
-    const target = document.getElementById("pitch-export-area");
-    if (!target) return;
-
-    setIsExporting(true);
-
-    try {
-      const canvas = await html2canvas(target, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: themeBg 
-      });
-
-      const dataUrl = canvas.toDataURL("image/png");
-
-      if (navigator.share) {
-        try {
-          const response = await fetch(dataUrl);
-          const blob = await response.blob();
-          const file = new File([blob], `formation_${selectedDateKey}.png`, { type: 'image/png' });
-          
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: `${teamName} フォーメーション`,
-              files: [file]
-            });
-            setIsExporting(false);
-            return;
-          }
-        } catch (shareError) {
-          console.log("Share API キャンセルまたはエラー:", shareError);
-        }
-      }
-
-      const link = document.createElement("a");
-      link.href = dataUrl;
-      link.download = `formation_${selectedDateKey}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-    } catch (error) {
-      console.error("画像生成エラー:", error);
-      alert("画像の生成に失敗しました。");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const benchMembers = membersList.filter(m => (status[m.id] === "ok" || status[m.id] === "maybe") && !Object.values(placedBySlot).includes(m.id));
-
-  return (
-    <div className="page" style={{
-      '--theme-main': themeMain,
-      '--theme-accent1': themeAccent1,
-      '--theme-accent2': themeAccent2,
-      '--theme-bg': themeBg,
-      '--theme-page-bg': themePageBg
-    }}>
-      <header className="topbar">
-        <div className="brandBar">
-          <div className="logoBox">
-            {logoDataUrl ? <img className="logoImg" src={logoDataUrl} alt="logo" /> : <div className="logoPlaceholder">LOGO</div>}
-          </div>
-          <div className="teamName">{teamName}</div>
-        </div>
-        <div className="controls">
-          <button className="btn" type="button" onClick={() => {
-            if (isAdmin || isMaster) { setIsAdmin(false); setIsMaster(false); }
-            else {
-              const code = window.prompt("ENTER CODE");
-              if (code === "5963") { setIsMaster(true); alert("マスター権限"); }
-              else if (code === adminCode) { setIsAdmin(true); alert("管理者権限"); }
-              else { alert("コードが違います"); }
-            }
-          }}>{(isAdmin || isMaster) ? "ログアウト" : "管理者"}</button>
-        </div>
-      </header>
-
-      {(isAdmin || isMaster) && (
-        <div className="adminPanelMobile">
-          <div className="adminField">
-            <label className="adminLabel">チーム名設定</label>
-            <input className="textInput" value={teamName} onChange={(e) => setTeamName(e.target.value)} />
-          </div>
-          <div className="adminField">
-            <label className="adminLabel">チームロゴ変更</label>
-            <input type="file" accept="image/*" onChange={handleLogoChange} />
-          </div>
-
-          <div className="adminField">
-            <label className="adminLabel">チームカラー設定 (5色)</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '5px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="colorHint">1. メイン（ヘッダー・×・文字）</span>
-                <input type="color" value={themeMain} onChange={(e) => setThemeMain(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="colorHint">2. アクセント1（〇・日曜・強調）</span>
-                <input type="color" value={themeAccent1} onChange={(e) => setThemeAccent1(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="colorHint">3. アクセント2（△・土曜・枠線）</span>
-                <input type="color" value={themeAccent2} onChange={(e) => setThemeAccent2(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="colorHint">4. 背景１（カード等の土台）</span>
-                <input type="color" value={themeBg} onChange={(e) => setThemeBg(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="colorHint">5. 背景２（一番外側・日付の色）</span>
-                <input type="color" value={themePageBg} onChange={(e) => setThemePageBg(e.target.value)} />
-              </div>
-            </div>
-          </div>
-
-          <div className="adminField">
-            <label className="adminLabel">全体デフォルトフォーメーション</label>
-            <select className="select" value={defaultFormation} onChange={(e) => setDefaultFormation(e.target.value)}>
-              {keys.map(k => <option key={k} value={k}>{k}</option>)}
-            </select>
-          </div>
-          <div className="adminField">
-            <label className="adminLabel" style={{ color: 'var(--theme-accent1)' }}>管理者パスコード変更</label>
-            <input className="textInput" type="text" value={adminCode} onChange={(e) => setAdminCode(e.target.value)} style={{ borderColor: 'var(--theme-accent1)' }} />
-          </div>
-        </div>
-      )}
-
-      <div className="layout">
-        
-        <div className="section-calendar">
-          <Calendar 
-            monthDate={monthDate} 
-            selectedKey={selectedDateKey} 
-            onSelectDate={setSelectedDateKey} 
-            onPrev={() => setMonthDate(addMonths(monthDate, -1))} 
-            onNext={() => setMonthDate(addMonths(monthDate, 1))} 
-            generalMemosByDate={generalMemosByDate}
-          />
-          <WeeklySummary 
-            currentKey={selectedDateKey} 
-            statusByDate={statusByDate} 
-            onSelectDate={setSelectedDateKey} 
-            membersCount={membersList.length} 
-          />
-        </div>
-
-        <div className="section-list">
-          
-          <div className="panelHeader"><div className="panelTitle">全体メモ</div></div>
-          <textarea
-            className="generalMemoInput"
-            placeholder="全体への連絡事項"
-            key={`general-memo-${selectedDateKey}`}
-            defaultValue={generalMemosByDate[selectedDateKey] || ""}
-            onBlur={(e) => {
-              const val = e.target.value;
-              setGeneralMemosByDate(prev => ({
-                ...prev,
-                [selectedDateKey]: val
-              }));
-            }}
-          />
-
-          <div className="panelHeader"><div className="panelTitle">出欠確認</div></div>
-          <div className="listGridWrapper">
-            {membersList.map(m => (
-              <div key={m.id} className="listRowCompact">
-                <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                  
-                  {(isAdmin || isMaster) && (
-                    <button type="button" className="deleteBtn" onClick={() => handleDeleteMember(m.id)}>×</button>
-                  )}
-
-                  <input className="listNameCompact" value={names[m.id] || ""} placeholder={m.label} onChange={(e) => setNames({ ...names, [m.id]: e.target.value })} />
-                  <div className="listBtnsCompact">
-                    {["ok", "maybe", "no"].map(type => (
-                      <button 
-                        key={type} 
-                        className={`listBtnCompact ${type} ${status[m.id] === type ? "active" : ""}`} 
-                        onClick={() => setStatusFor(m.id, type)} 
-                        type="button"
-                      >
-                        {type === "ok" ? "○" : type === "maybe" ? "△" : "×"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <input
-                  type="text"
-                  className="personalMemoInput"
-                  placeholder="memo..."
-                  key={`${m.id}-${selectedDateKey}`}
-                  defaultValue={(memosByDate[selectedDateKey] || {})[m.id] || ""}
-                  onBlur={(e) => {
-                    const val = e.target.value;
-                    setMemosByDate(prev => ({
-                      ...prev,
-                      [selectedDateKey]: { ...(prev[selectedDateKey] || {}), [m.id]: val }
-                    }));
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-
-          {(isAdmin || isMaster) && (
-            <div style={{ marginTop: '10px', textAlign: 'center' }}>
-              <button type="button" className="addBtn" onClick={handleAddMember}>＋ メンバーを追加</button>
-            </div>
-          )}
-        </div>
-
-        <div className="section-bench">
-          <div className="panelHeader"><div className="panelTitle">ベンチ（待機メンバー）</div></div>
-          <div className="benchGrid">
-            {benchMembers.map(m => (
-              <div key={m.id} className={`benchCard status-${status[m.id]} ${selectedMemberId === m.id ? "selected-m" : ""}`} draggable onDragStart={(e) => e.dataTransfer.setData("text/memberId", m.id)} onClick={() => setSelectedMemberId(m.id === selectedMemberId ? null : m.id)}>
-                <div className="benchName">{names[m.id] || m.label}</div>
-                <div className="benchStatus">{status[m.id] === "ok" ? "○" : "△"}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ★修正済み：レイアウト崩れを防ぐ設定と、正しいIDの配置 */}
-        <div className="section-pitch" style={{ flexDirection: 'column', alignItems: 'center' }}>
-          
-          <div style={{ width: '95%', maxWidth: '600px', display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-            <button className="exportBtn" onClick={handleExportImage} disabled={isExporting}>
-              {isExporting ? "⏳ 処理中..." : "画像として書き出す"}
-            </button>
-          </div>
-
-          <div className="pitchWrap" id="pitch-export-area">
-            <div className="pitch">
-              <div className="lineLayer">
-                <div className="outerLine" /><div className="halfLine" /><div className="centerCircle" /><div className="centerSpot" />
-                <div className="penTop" /><div className="sixTop" /><div className="spotTop" /><div className="penBottom" /><div className="sixBottom" /><div className="spotBottom" />
-              </div>
-              {slots.map((s) => {
-                const mId = placedBySlot[s.id];
-                const st = mId ? status[mId] || "none" : "none";
-                return (
-                  <div key={s.id} className={`posSlot slot-${st} ${selectedMemberId ? "waiting-drop" : ""}`} style={{ left: `${s.x}%`, top: `${s.y}%` }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => placeMember(e.dataTransfer.getData("text/memberId"), s.id)}
-                    onClick={() => { if (selectedMemberId) placeMember(selectedMemberId, s.id); else if (mId) removeFromSlot(s.id); }}>
-                    <div className="posRole">{s.role}</div>
-                    {mId ? <button className={`posName status-${st}`} type="button">{names[mId] || membersList.find(x => x.id === mId)?.label || "NAME"}</button> : <div className="posEmpty">DROP</div>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="section-formation">
-           <div className="panelHeader" style={{ borderBottom: `2px solid var(--theme-main)`, marginBottom: '15px', paddingBottom: '10px' }}>
-              <div className="panelTitle" style={{ fontWeight: 'bold' }}>フォーメーション変更</div>
-           </div>
-           <select 
-             className="select" 
-             value={currentFormation} 
-             onChange={(e) => setFormationByDate(prev => ({ ...prev, [selectedDateKey]: e.target.value }))}
-           >
-             {keys.map(k => <option key={k} value={k}>{k}</option>)}
-           </select>
-        </div>
-
-      </div>
-    </div>
-  );
+.exportBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
