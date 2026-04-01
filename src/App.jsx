@@ -39,11 +39,11 @@ const ADMIN_CODE_DEFAULT = "1234";
 
 // ★5色のテーマカラー構成
 const DEFAULT_COLORS = {
-  main: "#3e3226",    
-  accent1: "#9a2c2e", 
-  accent2: "#ca9e45", 
-  bg: "#e8e2d2",      
-  pageBg: "#f2eee2"   
+  main: "#000000",    
+  accent1: "#011D57", 
+  accent2: "#5C5C5C", 
+  bg: "#999999",      
+  pageBg: "#D6D6D6"   
 };
 
 // --- Sub Components ---
