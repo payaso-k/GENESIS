@@ -17,6 +17,7 @@ const firebaseConfig = {
   measurementId: "G-YRY4Z4YS05"
 };
 
+
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -37,13 +38,16 @@ const INITIAL_MEMBERS = Array.from({ length: 20 }, (_, i) => ({
 
 const ADMIN_CODE_DEFAULT = "1234";
 
+
+
 const DEFAULT_COLORS = {
-  main: "#000000",    
-  accent1: "#011D57", 
-  accent2: "#5C5C5C", 
-  bg: "#999999",      
-  pageBg: "#D6D6D6"   
+  main: "#3B3B3B",    
+  accent1: "#0644C1", 
+  accent2: "#E4B9B9", 
+  bg: "#FFFFFF",      
+  pageBg: "#FFFFFF"   
 };
+
 // --- Sub Components ---
 function WeeklySummary({ currentKey, statusByDate, onSelectDate, membersCount }) {
   if (!currentKey) return null;
@@ -164,6 +168,8 @@ export default function App() {
   const [teamName, setTeamName] = useState("TEAM NAME");
   const [logoDataUrl, setLogoDataUrl] = useState("");
   
+  const [memberImages, setMemberImages] = useState({});
+
   const [themeMain, setThemeMain] = useState(DEFAULT_COLORS.main);
   const [themeAccent1, setThemeAccent1] = useState(DEFAULT_COLORS.accent1);
   const [themeAccent2, setThemeAccent2] = useState(DEFAULT_COLORS.accent2);
@@ -184,8 +190,6 @@ export default function App() {
   const [isLoaded, setIsLoaded] = useState(false);
   
   const [isExporting, setIsExporting] = useState(false);
-  
-  // 一括入力モーダルを開いているメンバーのIDを保存するステート
   const [batchModalMemberId, setBatchModalMemberId] = useState(null);
 
   const currentFormation = formationByDate[selectedDateKey] || defaultFormation || keys[0];
@@ -193,7 +197,6 @@ export default function App() {
   const placedBySlot = placedBySlotByDate[selectedDateKey] || {};
   const slots = useMemo(() => FORMATIONS[currentFormation] ?? [], [currentFormation]);
 
-  // 現在選択されている日付から「その週の月〜日」のリストを作る
   const currentWeekDates = useMemo(() => {
     const target = new Date(selectedDateKey);
     const day = target.getDay();
@@ -224,6 +227,7 @@ export default function App() {
         if (data.adminCode) setAdminCode(data.adminCode);
         if (data.membersList) setMembersList(data.membersList);
         if (data.generalMemosByDate) setGeneralMemosByDate(data.generalMemosByDate);
+        if (data.memberImages) setMemberImages(data.memberImages);
         
         if (data.themeMain) setThemeMain(data.themeMain);
         if (data.themeAccent1) setThemeAccent1(data.themeAccent1);
@@ -241,9 +245,9 @@ export default function App() {
     const dbRef = ref(db, 'teamData/');
     set(dbRef, {
       teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate,
-      themeMain, themeAccent1, themeAccent2, themeBg, themePageBg 
+      themeMain, themeAccent1, themeAccent2, themeBg, themePageBg, memberImages
     });
-  }, [teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate, themeMain, themeAccent1, themeAccent2, themeBg, themePageBg, isLoaded]);
+  }, [teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate, themeMain, themeAccent1, themeAccent2, themeBg, themePageBg, memberImages, isLoaded]);
 
   useEffect(() => {
     document.body.style.backgroundColor = themePageBg;
@@ -300,6 +304,11 @@ export default function App() {
   const handleDeleteMember = (id) => {
     if (window.confirm("このメンバーを削除しますか？\n（過去のデータは残りますが、リストからは消えます）")) {
       setMembersList(membersList.filter(m => m.id !== id));
+      setMemberImages(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     }
   };
 
@@ -339,6 +348,19 @@ export default function App() {
   };
 
   const benchMembers = membersList.filter(m => (status[m.id] === "ok" || status[m.id] === "maybe") && !Object.values(placedBySlot).includes(m.id));
+
+  // ピッチの背景色指定
+  const pitchStyle = {
+    backgroundColor: '#2f4f2f',
+    backgroundImage: `linear-gradient(
+      to bottom,
+      #2f4f2f 0%, #2f4f2f 10%, #3a633a 10%, #3a633a 20%,
+      #2f4f2f 20%, #2f4f2f 30%, #3a633a 30%, #3a633a 40%,
+      #2f4f2f 40%, #2f4f2f 50%, #3a633a 50%, #3a633a 60%,
+      #2f4f2f 60%, #2f4f2f 70%, #3a633a 70%, #3a633a 80%,
+      #2f4f2f 80%, #2f4f2f 90%, #3a633a 90%, #3a633a 100%
+    )`
+  };
 
   return (
     <div className="page" style={{
@@ -415,6 +437,61 @@ export default function App() {
             <label className="adminLabel" style={{ color: 'var(--theme-accent1)' }}>管理者パスコード変更</label>
             <input className="textInput" type="text" value={adminCode} onChange={(e) => setAdminCode(e.target.value)} style={{ borderColor: 'var(--theme-accent1)' }} />
           </div>
+
+          <div className="adminField" style={{ marginTop: '10px' }}>
+            <label className="adminLabel">
+              メンバーのアイコン画像設定
+              <span style={{ fontSize: '10px', fontWeight: 'normal', color: 'var(--theme-accent1)', display: 'block' }}>
+                ※推奨: 正方形で2MB以下の画像
+              </span>
+            </label>
+            <div style={{ 
+              padding: '10px', 
+              background: '#fff', borderRadius: '8px', 
+              border: '1px solid color-mix(in srgb, var(--theme-main) 30%, transparent)' 
+            }}>
+              {membersList.map(m => (
+                <div key={`img-${m.id}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '8px', borderBottom: '1px solid #eee', marginBottom: '8px' }}>
+                  
+                  <span style={{ 
+                    fontSize: '13px', width: '80px', minWidth: '80px', flexShrink: 0, 
+                    overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', 
+                    color: 'var(--theme-main)', fontWeight: 'bold' 
+                  }}>
+                    {names[m.id] || m.label}
+                  </span>
+                  
+                  <input type="file" accept="image/*" style={{ flex: 1, minWidth: 0, fontSize: '11px', padding: 0, border: 'none' }} onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    if (file.size > 2 * 1024 * 1024) { 
+                      alert("画像サイズが大きすぎます。2MB以下の画像にしてください。"); 
+                      e.target.value = ''; 
+                      return; 
+                    }
+                    const r = new FileReader();
+                    r.onload = (ev) => setMemberImages(prev => ({ ...prev, [m.id]: ev.target.result }));
+                    r.readAsDataURL(file);
+                  }} />
+
+                  {memberImages[m.id] && (
+                    <img src={memberImages[m.id]} alt="icon" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--theme-accent2)', flexShrink: 0 }} />
+                  )}
+
+                  {memberImages[m.id] && (
+                    <button type="button" onClick={() => {
+                      if(window.confirm('この画像を削除しますか？')) {
+                        setMemberImages(prev => { const n = {...prev}; delete n[m.id]; return n; });
+                      }
+                    }} style={{ background: 'var(--theme-main)', color: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', flexShrink: 0 }}>
+                      削除
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -469,7 +546,14 @@ export default function App() {
                     value={names[m.id] || ""} 
                     placeholder={m.label} 
                     onChange={(e) => setNames({ ...names, [m.id]: e.target.value })} 
-                    style={{ flex: 1, textAlign: 'left', paddingLeft: '4px' }}
+                    style={{ 
+                      flex: 1, textAlign: 'left', 
+                      padding: '4px 8px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                      borderRadius: '4px',
+                      border: '1px solid color-mix(in srgb, var(--theme-main) 20%, transparent)',
+                      color: 'var(--theme-main)',
+                    }}
                   />
 
                   <div className="listBtnsCompact">
@@ -501,7 +585,7 @@ export default function App() {
                   <input
                     type="text"
                     className="personalMemoInput"
-                    placeholder="memo..."
+                    placeholder="メモを入力..."
                     key={`${m.id}-${selectedDateKey}`}
                     defaultValue={(memosByDate[selectedDateKey] || {})[m.id] || ""}
                     onBlur={(e) => {
@@ -540,12 +624,12 @@ export default function App() {
         <div className="section-pitch" style={{ flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ width: '95%', maxWidth: '600px', display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
             <button className="exportBtn" onClick={handleExportImage} disabled={isExporting}>
-              {isExporting ? "⏳ 処理中..." : "📸 画像として書き出す"}
+              {isExporting ? "⏳ 処理中..." : "画像として書き出す"}
             </button>
           </div>
 
           <div className="pitchWrap" id="pitch-export-area">
-            <div className="pitch">
+            <div className="pitch" style={pitchStyle}>
               <div className="lineLayer">
                 <div className="outerLine" /><div className="halfLine" /><div className="centerCircle" /><div className="centerSpot" />
                 <div className="penTop" /><div className="sixTop" /><div className="spotTop" /><div className="penBottom" /><div className="sixBottom" /><div className="spotBottom" />
@@ -553,13 +637,76 @@ export default function App() {
               {slots.map((s) => {
                 const mId = placedBySlot[s.id];
                 const st = mId ? status[mId] || "none" : "none";
+                const hasImage = mId && memberImages[mId];
+
                 return (
-                  <div key={s.id} className={`posSlot slot-${st} ${selectedMemberId ? "waiting-drop" : ""}`} style={{ left: `${s.x}%`, top: `${s.y}%` }}
+                  <div key={s.id} className={`posSlot slot-${st} ${selectedMemberId ? "waiting-drop" : ""}`} 
+                    style={{ 
+                      left: `${s.x}%`, top: `${s.y}%`,
+                      border: hasImage ? `2px solid ${st === 'ok' ? 'var(--theme-accent1)' : 'var(--theme-accent2)'}` : ''
+                    }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => placeMember(e.dataTransfer.getData("text/memberId"), s.id)}
-                    onClick={() => { if (selectedMemberId) placeMember(selectedMemberId, s.id); else if (mId) removeFromSlot(s.id); }}>
-                    <div className="posRole">{s.role}</div>
-                    {mId ? <button className={`posName status-${st}`} type="button">{names[mId] || membersList.find(x => x.id === mId)?.label || "NAME"}</button> : <div className="posEmpty">DROP</div>}
+                    onClick={() => { if (selectedMemberId) placeMember(selectedMemberId, s.id); else if (mId) removeFromSlot(s.id); }}
+                  >
+                    
+                    {hasImage && (
+                      <img
+                        src={memberImages[mId]}
+                        alt="icon"
+                        style={{
+                          position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                          borderRadius: '50%', objectFit: 'cover', zIndex: 1
+                        }}
+                      />
+                    )}
+
+                    <div className="posRole" style={hasImage ? {
+                      position: 'absolute', top: '-8px', left: '-12px',
+                      background: 'var(--theme-main)', padding: '2px 4px',
+                      borderRadius: '4px', zIndex: 10, border: '1px solid #fff',
+                      fontSize: '9px'
+                    } : { zIndex: 10 }}>
+                      {s.role}
+                    </div>
+
+                    {/* ★修正: 1列で表示し、はみ出る場合は「...」にする設定を追加 */}
+                    {mId ? (
+                      <div 
+                        style={{
+                          ...(hasImage ? {
+                            position: 'absolute', bottom: '-14px', left: '50%', transform: 'translateX(-50%)',
+                          } : {
+                            marginTop: '2px'
+                          }),
+                          width: 'max-content', 
+                          minWidth: '45px', 
+                          maxWidth: '80px', // 約6文字分の幅
+                          zIndex: 10,
+                          padding: '3px 6px', 
+                          fontSize: '10.5px', 
+                          fontWeight: 'bold',
+                          borderRadius: '10px',
+                          boxShadow: '0 3px 6px rgba(0,0,0,0.6)',
+                          background: 'rgba(0, 0, 0, 0.4)',
+                          backdropFilter: 'blur(2px)',
+                          WebkitBackdropFilter: 'blur(4px)',
+                          border: `1px solid ${st === 'ok' ? 'var(--theme-accent1)' : st === 'maybe' ? 'var(--theme-accent2)' : 'rgba(255,255,255,0.4)'}`,
+                          color: '#ffffff',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                          textAlign: 'center',
+                          
+                          // ↓ この3行で「絶対に1列」「はみ出たら...」にする魔法
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        {names[mId] || membersList.find(x => x.id === mId)?.label || "NAME"}
+                      </div>
+                    ) : (
+                      <div className="posEmpty" style={{ zIndex: 10 }}>DROP</div>
+                    )}
                   </div>
                 );
               })}
