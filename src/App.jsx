@@ -16,7 +16,6 @@ const firebaseConfig = {
   appId: "1:1034834920255:web:6ecb16497b63e82d47098a",
   measurementId: "G-YRY4Z4YS05"
 };
-;
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
@@ -238,13 +237,22 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // ★修正：通信大渋滞を防ぐためのデバウンス（遅延保存）処理を追加しました！
   useEffect(() => {
     if (!isLoaded) return;
-    const dbRef = ref(db, 'teamData/');
-    set(dbRef, {
-      teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate,
-      themeMain, themeAccent1, themeAccent2, themeBg, themePageBg, memberImages
-    });
+    
+    // 入力があるたびに、1秒(1000ミリ秒)待ってから通信するようにタイマーをセット
+    const timerId = setTimeout(() => {
+      const dbRef = ref(db, 'teamData/');
+      set(dbRef, {
+        teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate,
+        themeMain, themeAccent1, themeAccent2, themeBg, themePageBg, memberImages
+      });
+    }, 1000);
+
+    // もし1秒以内に次の入力が来たら、前のタイマーをキャンセルして数え直す（渋滞防止）
+    return () => clearTimeout(timerId);
+
   }, [teamName, logoDataUrl, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate, themeMain, themeAccent1, themeAccent2, themeBg, themePageBg, memberImages, isLoaded]);
 
   useEffect(() => {
@@ -575,7 +583,6 @@ export default function App() {
                   {(isAdmin || isMaster) && (
                     <button type="button" className="deleteBtn" onClick={() => handleDeleteMember(m.id)} style={{ margin: 0 }}>×</button>
                   )}
-                  {/* ★修正: 余計な背景色や枠線を消し、元通りのシンプルな下線に完全に戻しました */}
                   <input 
                     className="listNameCompact" 
                     value={names[m.id] || ""} 
@@ -652,7 +659,7 @@ export default function App() {
         <div className="section-pitch" style={{ flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ width: '95%', maxWidth: '600px', display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
             <button className="exportBtn" onClick={handleExportImage} disabled={isExporting}>
-              {isExporting ? "⏳ 処理中..." : "画像として書き出す"}
+              {isExporting ? "⏳ 処理中..." : "書き出す"}
             </button>
           </div>
 
