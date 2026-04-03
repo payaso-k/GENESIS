@@ -245,9 +245,16 @@ export default function App() {
     const timerId = setTimeout(() => {
       const dbRef = ref(db, 'teamData/');
       // ★画像データ（memberImages, logoDataUrl）はここから除外しました
+      // ★復活バグ修正：空っぽになった要素には「null（削除しろ）」という指示を明示的に送るようにしました
       update(dbRef, {
-        teamName, names, formationByDate, defaultFormation, statusByDate, memosByDate, placedBySlotByDate, adminCode, membersList, generalMemosByDate,
-        themeMain, themeAccent1, themeAccent2, themeBg, themePageBg
+        teamName, defaultFormation, adminCode, membersList,
+        themeMain, themeAccent1, themeAccent2, themeBg, themePageBg,
+        names: Object.keys(names).length > 0 ? names : null,
+        formationByDate: Object.keys(formationByDate).length > 0 ? formationByDate : null,
+        statusByDate: Object.keys(statusByDate).length > 0 ? statusByDate : null,
+        memosByDate: Object.keys(memosByDate).length > 0 ? memosByDate : null,
+        placedBySlotByDate: Object.keys(placedBySlotByDate).length > 0 ? placedBySlotByDate : null,
+        generalMemosByDate: Object.keys(generalMemosByDate).length > 0 ? generalMemosByDate : null
       });
     }, 1000);
 
@@ -426,7 +433,8 @@ export default function App() {
         <div className="adminPanelMobile">
           <div className="adminField">
             <label className="adminLabel">チーム名設定</label>
-            <input className="textInput" value={teamName} onChange={(e) => setTeamName(e.target.value)} />
+            {/* ★エコーバグ修正：入力を終えた時（onBlur）にのみ保存するようにしました */}
+            <input className="textInput" defaultValue={teamName} onBlur={(e) => setTeamName(e.target.value)} />
           </div>
           <div className="adminField">
             <label className="adminLabel">チームロゴ変更</label>
@@ -467,7 +475,8 @@ export default function App() {
           </div>
           <div className="adminField">
             <label className="adminLabel" style={{ color: 'var(--theme-accent1)' }}>管理者パスコード変更</label>
-            <input className="textInput" type="text" value={adminCode} onChange={(e) => setAdminCode(e.target.value)} style={{ borderColor: 'var(--theme-accent1)' }} />
+            {/* ★エコーバグ修正：入力を終えた時（onBlur）にのみ保存するようにしました */}
+            <input className="textInput" type="text" defaultValue={adminCode} onBlur={(e) => setAdminCode(e.target.value)} style={{ borderColor: 'var(--theme-accent1)' }} />
           </div>
 
           <div className="adminField" style={{ marginTop: '10px' }}>
@@ -592,11 +601,12 @@ export default function App() {
                   {(isAdmin || isMaster) && (
                     <button type="button" className="deleteBtn" onClick={() => handleDeleteMember(m.id)} style={{ margin: 0 }}>×</button>
                   )}
+                  {/* ★エコーバグ修正：入力を終えた時（onBlur）にのみ保存するようにしました */}
                   <input 
                     className="listNameCompact" 
-                    value={names[m.id] || ""} 
+                    defaultValue={names[m.id] || ""} 
                     placeholder={m.label} 
-                    onChange={(e) => setNames({ ...names, [m.id]: e.target.value })} 
+                    onBlur={(e) => setNames(prev => ({ ...prev, [m.id]: e.target.value }))} 
                     style={{ flex: 1, textAlign: 'left', paddingLeft: '4px' }}
                   />
 
